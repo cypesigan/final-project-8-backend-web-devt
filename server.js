@@ -4,6 +4,7 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 const seedDatabase = require("./seed");
 const User = require("./models/User");
+const { protect, authorize } = require("./middleware/authMiddleware");
 
 const app = express();
 
@@ -42,8 +43,11 @@ app.use("/api/materials", materialRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/schedule", scheduleRoutes);
 
-// Optional trigger to reseed data via API
-app.post("/api/admin/reseed", async (req, res) => {
+// Reseed wipes ALL data: admin only, and only when ALLOW_RESEED=true in .env
+app.post("/api/admin/reseed", protect, authorize("admin"), async (req, res) => {
+  if (process.env.ALLOW_RESEED !== "true") {
+    return res.status(403).json({ message: "Reseed is disabled" });
+  }
   try {
     await seedDatabase();
     res.json({ message: "Database reseeded successfully from mock data!" });
