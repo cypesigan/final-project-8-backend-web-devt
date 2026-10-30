@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+mongoose.set("toJSON", { virtuals: true });
+
 let memoryServer = null;
 
 const connectDB = async () => {
