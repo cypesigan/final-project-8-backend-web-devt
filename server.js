@@ -1,4 +1,11 @@
 require("dotenv").config();
+
+// Tokens are signed in authController and verified in authMiddleware, both with this secret
+if (!process.env.JWT_SECRET) {
+  console.error("FATAL: JWT_SECRET is missing");
+  process.exit(1);
+}
+
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");
