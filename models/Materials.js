@@ -44,6 +44,22 @@ const materialSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // Fields the frontend reads/sends
+    courseTitle: {
+      type: String,
+      default: "",
+    },
+    uploadDate: {
+      type: String,
+      default: () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    },
+    downloadUrl: {
+      type: String,
+      default: "",
+    },
+    unitIdx: {
+      type: Number,
+    },
     description: {
       type: String,
       default: "",

@@ -32,6 +32,19 @@ const announcementSchema = new mongoose.Schema(
       type: String,
       default: "Faculty / Instructor",
     },
+    // Fields the frontend reads/sends
+    authorName: {
+      type: String,
+      default: "",
+    },
+    authorRole: {
+      type: String,
+      default: "",
+    },
+    isRead: {
+      type: Boolean,
+      default: false,
+    },
     date: {
       type: String,
       default: () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
