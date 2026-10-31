@@ -1,7 +1,7 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "cacheup_jwt_super_secret_dev_key_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // ==== REGISTER ====
 const register = async (req, res) => {

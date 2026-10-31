@@ -17,6 +17,14 @@ const seedData = require("./seedData.json");
 
 const seedDatabase = async () => {
   try {
+    // Seed accounts' password: from SEED_PASSWORD; password123 only allowed locally
+    const seedPassword =
+      process.env.SEED_PASSWORD ||
+      (process.env.NODE_ENV === "production" ? null : "password123");
+    if (!seedPassword) {
+      throw new Error("SEED_PASSWORD is required in production");
+    }
+    
     console.log("--- Starting Database Seeding ---");
 
     // Clear existing collections
@@ -33,10 +41,9 @@ const seedDatabase = async () => {
     ]);
     console.log("Cleared existing database collections.");
 
-    // 1. Seed Users (Hash password123 for all users)
+    // 1. Seed Users (all share the seed password)
     const salt = await bcrypt.genSalt(10);
-    const defaultHashedPassword = await bcrypt.hash("password123", salt);
-
+    const defaultHashedPassword = await bcrypt.hash(seedPassword, salt);
     const userDocs = seedData.users.map((u) => ({
       _id: u.id,
       name: u.name,

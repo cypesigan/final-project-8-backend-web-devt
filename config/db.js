@@ -1,9 +1,12 @@
 const mongoose = require("mongoose");
 
+mongoose.set("toJSON", { virtuals: true });
+
 let memoryServer = null;
 
 const connectDB = async () => {
   const uri = process.env.MONGO_URI;
+  const isProduction = process.env.NODE_ENV === "production";
 
   if (uri) {
     try {
@@ -13,9 +16,17 @@ const connectDB = async () => {
       return;
     } catch (error) {
       console.warn("MongoDB connection to MONGO_URI failed:", error.message);
+      if (isProduction) {
+        console.error("FATAL: Cannot connect to MongoDB");
+        process.exit(1);
+      }
       console.log("Starting in-memory MongoDB instance as a seamless fallback...");
     }
   } else {
+    if (isProduction) {
+      console.error("FATAL: Cannot connect to MongoDB (MONGO_URI is missing)");
+      process.exit(1);
+    }
     console.log("No MONGO_URI provided in .env, initializing in-memory MongoDB instance...");
   }
 
