@@ -16,8 +16,21 @@ const { protect, authorize } = require("./middleware/authMiddleware");
 
 const app = express();
 
+// CORS: only the origins in CLIENT_URL (comma-separated). Requests with no origin (Postman, health checks) pass.
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((o) => o.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
 // Middlewares
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, cb) =>
+      !origin || allowedOrigins.includes(origin)
+        ? cb(null, true)
+        : cb(new Error("Not allowed by CORS")),
+  })
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
