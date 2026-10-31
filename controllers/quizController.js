@@ -1,5 +1,7 @@
 const Quiz = require("../models/Quiz");
 const QuizSubmission = require("../models/QuizSubmission");
+const User = require("../models/User");
+const { sendError } = require("../utils/errors");
 
 // GET /api/quizzes
 const getQuizzes = async (req, res) => {
@@ -83,40 +85,48 @@ const getQuizSubmissions = async (req, res) => {
   }
 };
 
-// POST /api/quizzes/submit
+// POST /api/quizzes/submit (student)
+// The score is always calculated here from the quiz's answer key, never read from the body.
+// Who submitted comes from the token.
 const submitQuizAttempt = async (req, res) => {
   try {
     const data = req.body;
+    if (!data.quizId) {
+      return res.status(400).json({ message: "Quiz ID is required" });
+    }
     const quiz = await Quiz.findById(data.quizId);
-
-    let earnedScore = 0;
-    const maxScore = quiz?.totalPoints || data.maxScore || 100;
-
-    if (quiz && quiz.questions && quiz.questions.length > 0) {
-      quiz.questions.forEach((q) => {
-        const studentChoice = data.answers?.[q.id];
-        if (studentChoice !== undefined && studentChoice === q.correctOptionIndex) {
-          earnedScore += Number(q.points) || 10;
-        }
-      });
-    } else {
-      earnedScore = Number(data.score) || 0;
+    if (!quiz) {
+      return res.status(404).json({ message: "Quiz not found" });
+    }
+    const student = await User.findById(req.user.id);
+    if (!student) {
+      return res.status(404).json({ message: "User not found" });
     }
 
+    const answers = data.answers || {};
+    let earnedScore = 0;
+    quiz.questions.forEach((q) => {
+      const studentChoice = answers[q.id];
+      if (studentChoice !== undefined && studentChoice === q.correctOptionIndex) {
+        earnedScore += Number(q.points) || 10;
+      }
+    });
+
+    const maxScore = quiz.totalPoints || 100;
     const percentage = maxScore > 0 ? Math.round((earnedScore / maxScore) * 100) : 100;
-    const passed = percentage >= (quiz?.passingScorePercent || 70);
+    const passed = percentage >= (quiz.passingScorePercent || 70);
 
     const submissionData = {
       _id: data.id || `qsub-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      quizId: data.quizId,
-      quizTitle: quiz ? quiz.title : (data.quizTitle || "Quiz Assessment"),
-      courseId: quiz ? quiz.courseId : (data.courseId || "crs-1"),
-      courseName: quiz ? quiz.courseName : (data.courseName || "Course"),
-      studentId: data.studentId || "usr-1",
-      studentName: data.studentName || "Student",
-      studentAvatar: data.studentAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80",
+      quizId: quiz._id,
+      quizTitle: quiz.title,
+      courseId: quiz.courseId,
+      courseName: quiz.courseName,
+      studentId: student._id,
+      studentName: student.name,
+      studentAvatar: student.avatar,
       submittedAt: new Date().toISOString().replace("T", " ").slice(0, 16),
-      answers: data.answers || {},
+      answers,
       score: earnedScore,
       maxScore,
       percentage,
@@ -125,11 +135,9 @@ const submitQuizAttempt = async (req, res) => {
     };
 
     const newSub = await QuizSubmission.create(submissionData);
-    const obj = newSub.toObject();
-    obj.id = obj._id;
-    res.status(201).json(obj);
+    res.status(201).json(newSub);
   } catch (error) {
-    res.status(400).json({ message: "Failed to record quiz submission", error: error.message });
+    sendError(res, error, "Failed to record quiz submission");
   }
 };
 

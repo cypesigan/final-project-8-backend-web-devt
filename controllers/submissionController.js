@@ -1,4 +1,6 @@
 const Submission = require("../models/Submission");
+const Assignment = require("../models/Assignment");
+const User = require("../models/User");
 const { sendError } = require("../utils/errors");
 
 // GET /api/submissions
@@ -21,19 +23,47 @@ const getSubmissions = async (req, res) => {
   }
 };
 
-// POST /api/submissions (submit assignment)
+// POST /api/submissions (submit assignment, student)
+// Who submitted comes from the token. Assignment details come from the database.
+// Only the student's own work is read from the body; score, status and feedback always start empty.
 const submitAssignment = async (req, res) => {
   try {
-    const data = req.body;
-    if (data.id && !data._id) {
-      data._id = data.id;
+    const { id, assignmentId, submissionType, content, linkUrl, fileName, fileSize, fileUrl } = req.body;
+
+    if (!assignmentId) {
+      return res.status(400).json({ message: "Assignment ID is required" });
     }
+    const assignment = await Assignment.findById(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({ message: "Assignment not found" });
+    }
+    const student = await User.findById(req.user.id);
+    if (!student) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const data = {
+      assignmentId: assignment._id,
+      assignmentTitle: assignment.title,
+      courseId: assignment.courseId,
+      courseName: assignment.courseName,
+      maxScore: assignment.maxScore,
+      studentId: student._id,
+      studentName: student.name,
+      studentAvatar: student.avatar,
+      submissionType,
+      content,
+      linkUrl,
+      fileName,
+      fileSize,
+      fileUrl,
+    };
+    if (id) data._id = id; // the frontend creates "sub-..." ids and keeps using them
+
     const newSub = await Submission.create(data);
-    const obj = newSub.toObject();
-    obj.id = obj._id;
-    res.status(201).json(obj);
+    res.status(201).json(newSub);
   } catch (error) {
-    res.status(400).json({ message: "Failed to submit assignment", error: error.message });
+    sendError(res, error, "Failed to submit assignment");
   }
 };
 
