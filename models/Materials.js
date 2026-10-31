@@ -44,6 +44,26 @@ const materialSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    // The uploaded file itself (data URL) so teachers' PDFs, videos and images can be downloaded.
+    downloadUrl: {
+      type: String,
+      default: "",
+    },
+    fileName: {
+      type: String,
+      default: "",
+    },
+    courseTitle: {
+      type: String,
+      default: "",
+    },
+    unitIdx: {
+      type: Number,
+    },
+    uploadDate: {
+      type: String,
+      default: "",
+    },
     description: {
       type: String,
       default: "",
