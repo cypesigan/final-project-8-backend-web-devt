@@ -1,9 +1,26 @@
 const Material = require("../models/Materials");
+const User = require("../models/User");
 
-// GET /api/materials
+// GET /api/materials?courseId=
+// Logged-in students only see materials of courses they are enrolled in.
+// Guests, teachers and admins see everything (filtered by courseId when given).
 const getMaterials = async (req, res) => {
   try {
-    const materials = await Material.find().sort({ createdAt: -1 });
+    const filter = {};
+    if (req.query.courseId) filter.courseId = req.query.courseId;
+
+    if (req.user && req.user.role === "student") {
+      const user = await User.findById(req.user.id).select("enrolledCourseIds");
+      const enrolled = user ? user.enrolledCourseIds : [];
+      if (req.query.courseId) {
+        // Asking for a course they are not in → empty list, not an error
+        filter.courseId = enrolled.includes(req.query.courseId) ? req.query.courseId : { $in: [] };
+      } else {
+        filter.courseId = { $in: enrolled };
+      }
+    }
+
+    const materials = await Material.find(filter).sort({ createdAt: -1 });
     const formatted = materials.map((m) => {
       const obj = m.toObject();
       obj.id = obj._id;

@@ -16,6 +16,20 @@ const protect = (req, res, next) => {
   }
 };
 
+// Like protect, but never blocks: sets req.user when a valid token is sent, otherwise continues as a guest.
+// Used on GET routes the frontend still calls without a token.
+const optionalAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    try {
+      req.user = jwt.verify(authHeader.split(" ")[1], process.env.JWT_SECRET);
+    } catch (error) {
+      // Invalid or expired token: treat as a guest
+    }
+  }
+  next();
+};
+
 // Role check, use after protect: authorize("admin"), authorize("teacher", "admin")
 const authorize = (...roles) => (req, res, next) => {
   if (!req.user || !roles.includes(req.user.role)) {
@@ -24,4 +38,4 @@ const authorize = (...roles) => (req, res, next) => {
   next();
 };
 
-module.exports = { protect, authorize };
+module.exports = { protect, optionalAuth, authorize };
