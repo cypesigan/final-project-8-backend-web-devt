@@ -1,4 +1,6 @@
 const Course = require("../models/Course");
+const User = require("../models/User");
+const { sendError } = require("../utils/errors");
 
 // GET /api/courses
 const getCourses = async (req, res) => {
@@ -78,10 +80,121 @@ const deleteCourse = async (req, res) => {
   }
 };
 
+// GET /api/courses/my-courses
+// Student: courses they are enrolled in. Teacher: courses they handle. Admin: all courses.
+const getMyCourses = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    let filter = {};
+    if (user.role === "student") {
+      filter = { _id: { $in: user.enrolledCourseIds } };
+    } else if (user.role === "teacher") {
+      filter = {
+        $or: [
+          { instructorId: user._id },
+          { teacher: user._id },
+          { _id: { $in: user.assignedCourseIds } },
+        ],
+      };
+    }
+
+    const courses = await Course.find(filter).sort({ createdAt: 1 });
+    res.status(200).json(courses);
+  } catch (error) {
+    sendError(res, error, "Failed to fetch your courses");
+  }
+};
+
+// POST /api/courses/:id/enroll (student)
+// User.enrolledCourseIds is the source of truth; Course.students and studentsCount follow it.
+const enrollCourse = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.enrolledCourseIds.includes(course._id)) {
+      return res.status(400).json({ message: "You are already enrolled in this course" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $addToSet: { enrolledCourseIds: course._id } },
+      { new: true }
+    );
+    const updatedCourse = await Course.findByIdAndUpdate(
+      course._id,
+      { $addToSet: { students: user._id }, $inc: { studentsCount: 1 } },
+      { new: true }
+    );
+
+    res.status(200).json({
+      message: `Enrolled in ${updatedCourse.title}`,
+      courseId: updatedCourse._id,
+      studentsCount: updatedCourse.studentsCount,
+      enrolledCourseIds: updatedUser.enrolledCourseIds,
+    });
+  } catch (error) {
+    sendError(res, error, "Failed to enroll in course");
+  }
+};
+
+// DELETE /api/courses/:id/enroll (student)
+const unenrollCourse = async (req, res) => {
+  try {
+    const course = await Course.findById(req.params.id);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (!user.enrolledCourseIds.includes(course._id)) {
+      return res.status(400).json({ message: "You are not enrolled in this course" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      { $pull: { enrolledCourseIds: course._id } },
+      { new: true }
+    );
+
+    // Never let the count go below 0 (seeded counts are not tied to real students)
+    const courseUpdate = { $pull: { students: user._id } };
+    if (course.studentsCount > 0) courseUpdate.$inc = { studentsCount: -1 };
+    const updatedCourse = await Course.findByIdAndUpdate(course._id, courseUpdate, { new: true });
+
+    res.status(200).json({
+      message: `Unenrolled from ${updatedCourse.title}`,
+      courseId: updatedCourse._id,
+      studentsCount: updatedCourse.studentsCount,
+      enrolledCourseIds: updatedUser.enrolledCourseIds,
+    });
+  } catch (error) {
+    sendError(res, error, "Failed to unenroll from course");
+  }
+};
+
 module.exports = {
   getCourses,
   getCourseById,
   createCourse,
   updateCourse,
   deleteCourse,
+  getMyCourses,
+  enrollCourse,
+  unenrollCourse,
 };
