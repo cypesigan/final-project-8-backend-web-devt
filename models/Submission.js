@@ -49,11 +49,17 @@ const submissionSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+      maxlength: [5000, "Content must be at most 5000 characters"],
     },
     linkUrl: {
       type: String,
       trim: true,
       default: "",
+      validate: {
+        // Empty is allowed (content or a file can be used instead)
+        validator: (v) => !v || /^https?:\/\/\S+$/i.test(v),
+        message: "Link must be a valid URL starting with http:// or https://",
+      },
     },
     fileName: {
       type: String,
@@ -75,6 +81,7 @@ const submissionSchema = new mongoose.Schema(
     score: {
       type: Number,
       default: null,
+      min: [0, "Score cannot be negative"],
     },
     maxScore: {
       type: Number,
@@ -83,6 +90,7 @@ const submissionSchema = new mongoose.Schema(
     feedback: {
       type: String,
       default: "",
+      maxlength: [1000, "Feedback must be at most 1000 characters"],
     },
     rubricScores: {
       type: mongoose.Schema.Types.Mixed,
@@ -99,5 +107,17 @@ const submissionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Proposal rule: a submission needs content, a link, or an uploaded file
+submissionSchema.pre("validate", function () {
+  if (!this.content && !this.linkUrl && !this.fileUrl && !this.fileName) {
+    this.invalidate("content", "Add text content, a link, or a file before submitting");
+  }
+});
+
+// Proposal rule: score cannot exceed the assignment's maxScore (copied onto the submission)
+submissionSchema.path("score").validate(function (v) {
+  return v === null || v === undefined || v <= (this.maxScore || 100);
+}, "Score cannot be higher than the maximum score");
 
 module.exports = mongoose.model("Submission", submissionSchema);
