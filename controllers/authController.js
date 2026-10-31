@@ -1,5 +1,10 @@
 const User = require("../models/User");
+const Course = require("../models/Course");
+const Submission = require("../models/Submission");
+const QuizSubmission = require("../models/QuizSubmission");
+const Schedule = require("../models/Schedule");
 const jwt = require("jsonwebtoken");
+const { sendError } = require("../utils/errors");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -145,4 +150,133 @@ const getMe = async (req, res) => {
   }
 };
 
-module.exports = { register, login, getMe };
+// Fields a user may change on their own profile. Everything else (role, status, points, email...) is admin-only.
+const PROFILE_FIELDS = ["name", "bio", "phone", "avatar", "department", "title"];
+
+const toUserJson = (user) => {
+  const obj = user.toObject();
+  delete obj.password;
+  obj.id = obj._id;
+  return obj;
+};
+
+// Checks the current password and sets the new one. Returns an error message, or null when OK.
+// A wrong current password is a 400 (not 401), so the frontend doesn't treat it as "logged out".
+const applyPasswordChange = async (user, currentPassword, newPassword) => {
+  if (!currentPassword || !newPassword) {
+    return "Current password and new password are required";
+  }
+  if (!(await user.comparePassword(currentPassword))) {
+    return "Current password is incorrect";
+  }
+  if (newPassword.length < 8) {
+    return "New password must be at least 8 characters";
+  }
+  if (currentPassword === newPassword) {
+    return "New password must be different from the current password";
+  }
+  user.password = newPassword; // hashed by the pre("save") hook in models/User.js
+  return null;
+};
+
+// ==== GET /api/auth/profile ====
+const getProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.status(200).json({ user: toUserJson(user) });
+  } catch (error) {
+    sendError(res, error, "Failed to fetch profile");
+  }
+};
+
+// ==== PUT /api/auth/profile ====
+// Body: any of name, bio, phone, avatar, department, title.
+// Optional password change in the same request: currentPassword + newPassword.
+const updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    PROFILE_FIELDS.forEach((field) => {
+      if (req.body[field] !== undefined) user[field] = req.body[field];
+    });
+
+    if (req.body.newPassword !== undefined) {
+      const problem = await applyPasswordChange(user, req.body.currentPassword, req.body.newPassword);
+      if (problem) return res.status(400).json({ message: problem });
+    }
+
+    await user.save(); // save() runs the schema validators (e.g. name length)
+    res.status(200).json({ message: "Profile updated", user: toUserJson(user) });
+  } catch (error) {
+    sendError(res, error, "Failed to update profile");
+  }
+};
+
+// ==== PUT /api/auth/password ====
+// Body: { currentPassword, newPassword }
+const changePassword = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const problem = await applyPasswordChange(user, req.body.currentPassword, req.body.newPassword);
+    if (problem) return res.status(400).json({ message: problem });
+
+    await user.save();
+    res.status(200).json({ message: "Password changed successfully" });
+  } catch (error) {
+    sendError(res, error, "Failed to change password");
+  }
+};
+
+// ==== DELETE /api/auth/profile ====
+// Body: { password }. Deletes the account and the student's own data.
+const deleteAccount = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("+password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.role === "admin") {
+      return res.status(400).json({ message: "Admin accounts cannot be self-deleted" });
+    }
+    if (!req.body || !req.body.password || !(await user.comparePassword(req.body.password))) {
+      return res.status(400).json({ message: "Password is incorrect" });
+    }
+
+    await Promise.all([
+      Submission.deleteMany({ studentId: user._id }),
+      QuizSubmission.deleteMany({ studentId: user._id }),
+      Schedule.deleteOne({ _id: user._id }),
+      // Leave every class list; lower the count only where it is above 0
+      Course.updateMany(
+        { _id: { $in: user.enrolledCourseIds }, studentsCount: { $gt: 0 } },
+        { $inc: { studentsCount: -1 } }
+      ),
+      Course.updateMany({ students: user._id }, { $pull: { students: user._id } }),
+    ]);
+    await User.deleteOne({ _id: user._id });
+
+    res.status(200).json({ message: "Your account has been deleted", id: user._id });
+  } catch (error) {
+    sendError(res, error, "Failed to delete account");
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  getMe,
+  getProfile,
+  updateProfile,
+  changePassword,
+  deleteAccount,
+};
