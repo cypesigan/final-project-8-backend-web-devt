@@ -7,6 +7,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 const express = require("express");
+const mongoose = require("mongoose");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const seedDatabase = require("./seed");
@@ -26,7 +27,11 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({ message: "CacheUp API is healthy", timestamp: new Date().toISOString() });
+  res.json({
+    message: "CacheUp API is healthy",
+    db: mongoose.connection.readyState === 1,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Routes
