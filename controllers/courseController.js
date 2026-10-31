@@ -1,4 +1,9 @@
 const Course = require("../models/Course");
+const Assignment = require("../models/Assignment");
+const Quiz = require("../models/Quiz");
+const Material = require("../models/Materials");
+const Submission = require("../models/Submission");
+const QuizSubmission = require("../models/QuizSubmission");
 const User = require("../models/User");
 const { sendError } = require("../utils/errors");
 
@@ -74,6 +79,16 @@ const deleteCourse = async (req, res) => {
     if (!course) {
       return res.status(404).json({ message: "Course not found" });
     }
+    // Remove everything that belonged to the course and un-enroll its students.
+    const id = req.params.id;
+    await Promise.all([
+      Assignment.deleteMany({ courseId: id }),
+      Quiz.deleteMany({ courseId: id }),
+      Material.deleteMany({ courseId: id }),
+      Submission.deleteMany({ courseId: id }),
+      QuizSubmission.deleteMany({ courseId: id }),
+      User.updateMany({}, { $pull: { enrolledCourseIds: id, assignedCourseIds: id } }),
+    ]);
     res.status(200).json({ message: "Course deleted successfully", id: req.params.id });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete course", error: error.message });
